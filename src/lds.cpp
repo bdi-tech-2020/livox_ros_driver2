@@ -39,7 +39,8 @@ CacheIndex Lds::cache_index_;
 /* Member function --------------------------------------------------------- */
 Lds::Lds(const double publish_freq, const uint8_t data_src)
     : lidar_count_(kMaxSourceLidar),
-      semaphore_(0),
+      pcd_semaphore_(0),
+      imu_semaphore_(0),
       publish_freq_(publish_freq),
       data_src_(data_src),
       request_exit_(false) {
@@ -114,6 +115,11 @@ void Lds::StorageImuData(ImuData* imu_data) {
   LidarDevice *p_lidar = &lidars_[index];
   LidarImuDataQueue* imu_queue = &p_lidar->imu_data;
   imu_queue->Push(imu_data);
+  if (!imu_queue->Empty()) {
+    if (imu_semaphore_.GetCount() <= 0) {
+      imu_semaphore_.Signal();
+    }
+  }
 }
 
 void Lds::StorageLvxPointData(PointFrame* frame) {
@@ -125,7 +131,7 @@ void Lds::StorageLvxPointData(PointFrame* frame) {
   for (uint i = 0; i < lidar_number; ++i) {
     PointPacket& lidar_point = frame->lidar_point[i];
 
-    uint64_t base_time = frame->base_time;
+    uint64_t base_time = frame->base_time[i];
     uint8_t index = 0;
     int8_t ret = cache_index_.LvxGetIndex(lidar_point.lidar_type, lidar_point.handle, index);
     if (ret != 0) {
@@ -149,7 +155,7 @@ void Lds::StoragePointData(PointFrame* frame) {
     PointPacket& lidar_point = frame->lidar_point[i];
     //printf("StoragePointData, lidar_type:%u, point_num:%lu.\n", lidar_point.lidar_type, lidar_point.points_num);
 
-    uint64_t base_time = frame->base_time;
+    uint64_t base_time = frame->base_time[i];
 
     uint8_t index = 0;
     int8_t ret = cache_index_.GetIndex(lidar_point.lidar_type, lidar_point.handle, index);
@@ -178,13 +184,13 @@ void Lds::PushLidarData(PointPacket* lidar_data, const uint8_t index, const uint
   if (!QueueIsFull(queue)) {
     QueuePushAny(queue, (uint8_t *)lidar_data, base_time);
     if (!QueueIsEmpty(queue)) {
-      if (semaphore_.GetCount() <= 0) {
-        semaphore_.Signal();
+      if (pcd_semaphore_.GetCount() <= 0) {
+        pcd_semaphore_.Signal();
       }
     }
   } else {
-    if (semaphore_.GetCount() <= 0) {
-        semaphore_.Signal();
+    if (pcd_semaphore_.GetCount() <= 0) {
+        pcd_semaphore_.Signal();
     }
   }
 }
