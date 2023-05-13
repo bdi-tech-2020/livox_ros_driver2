@@ -39,6 +39,11 @@
 
 namespace livox_ros {
 
+#define CONTROL_DELAY		2000
+int Deviation_Count = 0;
+float Deviation_acc[3] = {0};
+float Deviation_gyro[3] = {0};
+
 /** Lidar Data Distribute Control--------------------------------------------*/
 #ifdef BUILDING_ROS1
 Lddc::Lddc(int format, int multi_topic, int data_src, int output_type,
@@ -335,7 +340,9 @@ void Lddc::PublishPointcloud2Data(const uint8_t index, const uint64_t timestamp,
 #endif
 
   if (kOutputToRos == output_type_) {
-    publisher_ptr->publish(cloud);
+    if(Deviation_Count >= CONTROL_DELAY){
+      publisher_ptr->publish(cloud);
+    }
   } else {
 #ifdef BUILDING_ROS1
     if (bag_ && enable_lidar_bag_) {
@@ -400,7 +407,9 @@ void Lddc::PublishCustomPointData(const CustomMsg& livox_msg, const uint8_t inde
 #endif
 
   if (kOutputToRos == output_type_) {
-    publisher_ptr->publish(livox_msg);
+    if(Deviation_Count >= CONTROL_DELAY){
+      publisher_ptr->publish(livox_msg);
+    }
   } else {
 #ifdef BUILDING_ROS1
     if (bag_ && enable_lidar_bag_) {
@@ -457,7 +466,9 @@ void Lddc::PublishPclData(const uint8_t index, const uint64_t timestamp, const P
 #ifdef BUILDING_ROS1
   PublisherPtr publisher_ptr = Lddc::GetCurrentPublisher(index);
   if (kOutputToRos == output_type_) {
-    publisher_ptr->publish(cloud);
+    if(Deviation_Count >= CONTROL_DELAY){
+      publisher_ptr->publish(cloud);
+    }
   } else {
     if (bag_ && enable_lidar_bag_) {
       bag_->write(publisher_ptr->getTopic(), ros::Time(timestamp / 1000000000.0), cloud);
@@ -471,8 +482,10 @@ void Lddc::PublishPclData(const uint8_t index, const uint64_t timestamp, const P
   return;
 }
 
+
+
 void Lddc::InitImuMsg(const ImuData& imu_data, ImuMsg& imu_msg, uint64_t& timestamp) {
-  imu_msg.header.frame_id = "livox_frame";
+  imu_msg.header.frame_id = "livox_imu_frame";
 
   timestamp = imu_data.time_stamp;
 #ifdef BUILDING_ROS1
@@ -481,13 +494,31 @@ void Lddc::InitImuMsg(const ImuData& imu_data, ImuMsg& imu_msg, uint64_t& timest
   imu_msg.header.stamp = rclcpp::Time(timestamp);  // to ros time stamp
 #endif
 
-  imu_msg.angular_velocity.x = imu_data.gyro_x;
-  imu_msg.angular_velocity.y = imu_data.gyro_y;
-  imu_msg.angular_velocity.z = imu_data.gyro_z;
-  imu_msg.linear_acceleration.x = imu_data.acc_x;
-  imu_msg.linear_acceleration.y = imu_data.acc_y;
-  imu_msg.linear_acceleration.z = imu_data.acc_z;
+  if(Deviation_Count<CONTROL_DELAY)
+	{
+    Deviation_acc[0] = (Deviation_acc[0] * Deviation_Count + imu_data.acc_x*9.805) / (Deviation_Count+1);
+    Deviation_acc[1] = (Deviation_acc[1] * Deviation_Count + imu_data.acc_y*9.805) / (Deviation_Count+1);
+    Deviation_acc[2] = (Deviation_acc[2] * Deviation_Count + imu_data.acc_z*9.805) / (Deviation_Count+1);
+    Deviation_gyro[0] = (Deviation_gyro[0] * Deviation_Count + imu_data.gyro_x) / (Deviation_Count+1);
+    Deviation_gyro[1] = (Deviation_gyro[1] * Deviation_Count + imu_data.gyro_y) / (Deviation_Count+1);
+    Deviation_gyro[2] = (Deviation_gyro[2] * Deviation_Count + imu_data.gyro_z) / (Deviation_Count+1);
+    Deviation_Count++;
+    imu_msg.angular_velocity.x = imu_data.gyro_x - Deviation_gyro[0];
+    imu_msg.angular_velocity.y = imu_data.gyro_y - Deviation_gyro[1];
+    imu_msg.angular_velocity.z = imu_data.gyro_z - Deviation_gyro[2];
+    imu_msg.linear_acceleration.x = imu_data.acc_x*9.805 - Deviation_acc[0];
+    imu_msg.linear_acceleration.y = imu_data.acc_y*9.805 - Deviation_acc[1];
+    imu_msg.linear_acceleration.z = imu_data.acc_z*9.805 - (Deviation_acc[2]-9.805);
+  } else {
+    imu_msg.angular_velocity.x = imu_data.gyro_x - Deviation_gyro[0];
+    imu_msg.angular_velocity.y = imu_data.gyro_y - Deviation_gyro[1];
+    imu_msg.angular_velocity.z = imu_data.gyro_z - Deviation_gyro[2];
+    imu_msg.linear_acceleration.x = imu_data.acc_x*9.805 - Deviation_acc[0];
+    imu_msg.linear_acceleration.y = imu_data.acc_y*9.805 - Deviation_acc[1];
+    imu_msg.linear_acceleration.z = imu_data.acc_z*9.805 - (Deviation_acc[2]-9.805);
+  }
 }
+
 
 void Lddc::PublishImuData(LidarImuDataQueue& imu_data_queue, const uint8_t index) {
   ImuData imu_data;
@@ -507,7 +538,9 @@ void Lddc::PublishImuData(LidarImuDataQueue& imu_data_queue, const uint8_t index
 #endif
 
   if (kOutputToRos == output_type_) {
-    publisher_ptr->publish(imu_msg);
+    if(Deviation_Count >= CONTROL_DELAY){
+      publisher_ptr->publish(imu_msg);
+    }
   } else {
 #ifdef BUILDING_ROS1
     if (bag_ && enable_imu_bag_) {
