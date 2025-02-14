@@ -42,12 +42,15 @@
 
 namespace livox_ros {
 
+// Function to calculate distance
+double distance(double x1, double y1, double z1) {
+    return std::sqrt(std::pow((x1), 2) + std::pow((y1), 2) + std::pow((z1), 2));
+}
+
 /** Lidar Data Distribute Control--------------------------------------------*/
-Lddc::Lddc(int format, int multi_topic, int data_src, int output_type,
-           double frq, std::string &frame_id)
-    : transfer_format_(format), use_multi_topic_(multi_topic),
-      data_src_(data_src), output_type_(output_type), publish_frq_(frq),
-      frame_id_(frame_id) {
+Lddc::Lddc(int format, int multi_topic, int data_src, int output_type, double frq, std::string &frame_id, const std::vector<double>& filter_radius, const std::vector<std::string>& topic_names)
+    : transfer_format_(format), use_multi_topic_(multi_topic), data_src_(data_src), output_type_(output_type), publish_frq_(frq), frame_id_(frame_id), filter_radius_(filter_radius), topic_names_(topic_names)
+       {
   publish_period_ns_ = kNsPerSecond / publish_frq_;
   lds_ = nullptr;
 }
@@ -68,6 +71,7 @@ int Lddc::RegisterLds(Lds *lds) {
     return -1;
   }
 }
+
 
 void Lddc::DistributePointCloudData(void) {
   if (!lds_) {
@@ -183,7 +187,6 @@ void Lddc::PublishCustomPointcloud(LidarDataQueue *queue, uint8_t index) {
 
 void Lddc::PublishPointcloud2AndCustomMsg(LidarDataQueue *queue,
                                           uint8_t index) {
-  // printf("12312312321\n");
   while (!QueueIsEmpty(queue)) {
     StoragePacket pkg;
     QueuePop(queue, &pkg);
@@ -294,6 +297,16 @@ void Lddc::InitPointcloud2Msg(const StoragePacket &pkg, PointCloud2 &cloud,
     point.x = pkg.points[i].x;
     point.y = pkg.points[i].y;
     point.z = pkg.points[i].z;
+
+    double current_radius = filter_radius_[index];
+    if (index < filter_radius_.size()) {
+      current_radius = filter_radius_[index];
+    }
+    if (std::sqrt(point.x * point.x + point.y * point.y + point.z * point.z) < current_radius) {
+      point.x = 10000.0;
+      point.y = 10000.0;
+      point.z = 10000.0;
+    }
     point.reflectivity = pkg.points[i].intensity;
     point.tag = pkg.points[i].tag;
     point.line = pkg.points[i].line;
@@ -412,7 +425,6 @@ void Lddc::PublishImuData(LidarImuDataQueue &imu_data_queue,
                           const uint8_t index) {
   ImuData imu_data;
   if (!imu_data_queue.Pop(imu_data)) {
-    // printf("Publish imu data failed, imu data queue pop failed.\n");
     return;
   }
 
@@ -485,16 +497,14 @@ Lddc::GetCurrentPublisher(uint8_t handle) {
   uint32_t queue_size = kMinEthPacketQueueSize;
   if (use_multi_topic_) {
     if (!private_pub_[handle]) {
-      char name_str[48];
-      memset(name_str, 0, sizeof(name_str));
-
-      std::string ip_string = IpNumToString(lds_->lidars_[handle].handle);
-      snprintf(name_str, sizeof(name_str), "livox/lidar_%s",
-               ReplacePeriodByUnderline(ip_string).c_str());
-      std::string topic_name(name_str);
+      std::string topic_name;
+      if (handle < topic_names_.size()) {
+        topic_name = "livox/lidar_" + topic_names_[handle];
+      } else {
+        topic_name = "livox/lidar";
+      }
       queue_size = queue_size * 2; // queue size is 64 for only one lidar
-      private_pub_[handle] =
-          CreatePublisher(transfer_format_, topic_name, queue_size);
+      private_pub_[handle] = CreatePublisher(transfer_format_, topic_name, queue_size);
     }
     return private_pub_[handle];
   } else {
@@ -502,12 +512,9 @@ Lddc::GetCurrentPublisher(uint8_t handle) {
       std::string topic_name("livox/lidar");
       queue_size = queue_size * 8; // shared queue size is 256, for all lidars
       if (kAllMsg == transfer_format_) {
-        global_pub_ =
-            cur_node_->create_publisher<CustomMsg>(topic_name, queue_size);
-        global_pub_2_ = cur_node_->create_publisher<PointCloud2>(
-            "livox/lidar/pointcloud", queue_size);
-        DRIVER_INFO(*cur_node_, "%s publish use pointcloud2 and custom format",
-                    topic_name.c_str());
+        global_pub_ = cur_node_->create_publisher<CustomMsg>(topic_name, queue_size);
+        global_pub_2_ = cur_node_->create_publisher<PointCloud2>("livox/lidar/pointcloud", queue_size);
+        DRIVER_INFO(*cur_node_, "%s publish use pointcloud2 and custom format", topic_name.c_str());
       } else {
         global_pub_ = CreatePublisher(transfer_format_, topic_name, queue_size);
       }
@@ -557,15 +564,14 @@ Lddc::GetCurrentImuPublisher(uint8_t handle) {
   uint32_t queue_size = kMinEthPacketQueueSize;
   if (use_multi_topic_) {
     if (!private_imu_pub_[handle]) {
-      char name_str[48];
-      memset(name_str, 0, sizeof(name_str));
-      std::string ip_string = IpNumToString(lds_->lidars_[handle].handle);
-      snprintf(name_str, sizeof(name_str), "livox/imu_%s",
-               ReplacePeriodByUnderline(ip_string).c_str());
-      std::string topic_name(name_str);
+      std::string topic_name;
+      if (handle < topic_names_.size()) {
+        topic_name = "livox/imu_" + topic_names_[handle];
+      } else {
+        topic_name = "livox/imu";
+      }
       queue_size = queue_size * 2; // queue size is 64 for only one lidar
-      private_imu_pub_[handle] =
-          CreatePublisher(kLivoxImuMsg, topic_name, queue_size);
+      private_imu_pub_[handle] = CreatePublisher(kLivoxImuMsg, topic_name, queue_size);
     }
     return private_imu_pub_[handle];
   } else {

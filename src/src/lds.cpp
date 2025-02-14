@@ -163,6 +163,7 @@ void Lds::StoragePointData(PointFrame* frame) {
       printf("Storage point data failed, lidar type:%u, handle:%u.\n", lidar_point.lidar_type, lidar_point.handle);
       continue;
     }
+
     PushLidarData(&lidar_point, index, base_time);
   }
 }
