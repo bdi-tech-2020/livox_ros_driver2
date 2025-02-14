@@ -48,9 +48,9 @@ double distance(double x1, double y1, double z1) {
 }
 
 /** Lidar Data Distribute Control--------------------------------------------*/
-Lddc::Lddc(int format, int multi_topic, int data_src, int output_type, double frq, std::string &frame_id, double filter_radius_0, double filter_radius_1, std::string topic_name_0, std::string topic_name_1)
-    : transfer_format_(format), use_multi_topic_(multi_topic), data_src_(data_src), output_type_(output_type), publish_frq_(frq), frame_id_(frame_id), 
-      filter_radius_0_(filter_radius_0), filter_radius_1_(filter_radius_1), topic_name_0_(topic_name_0), topic_name_1_(topic_name_1) {
+Lddc::Lddc(int format, int multi_topic, int data_src, int output_type, double frq, std::string &frame_id, std::vector<double> filter_radius, std::vector<std::string> topic_names)
+    : transfer_format_(format), use_multi_topic_(multi_topic), data_src_(data_src), output_type_(output_type), publish_frq_(frq), frame_id_(frame_id), filter_radius_(filter_radius), topic_names_(topic_names)
+       {
   publish_period_ns_ = kNsPerSecond / publish_frq_;
   lds_ = nullptr;
 }
@@ -72,32 +72,8 @@ int Lddc::RegisterLds(Lds *lds) {
   }
 }
 
-// void Lddc::DistributePointCloudData(void) {
-//   if (!lds_) {
-//     std::cout << "lds is not registered" << std::endl;
-//     return;
-//   }
-//   if (lds_->IsRequestExit()) {
-//     std::cout << "DistributePointCloudData is RequestExit" << std::endl;
-//     return;
-//   }
-
-//   lds_->pcd_semaphore_.Wait();
-//   for (uint32_t i = 0; i < lds_->lidar_count_; i++) {
-//     uint32_t lidar_id = i;
-//     LidarDevice *lidar = &lds_->lidars_[lidar_id];
-//     LidarDataQueue *p_queue = &lidar->data;
-//     if ((kConnectStateSampling != lidar->connect_state) ||
-//         (p_queue == nullptr)) {
-//       continue;
-//     }
-//     PollingLidarPointCloudData(lidar_id, lidar);
-    
-//   }
-// }
 
 void Lddc::DistributePointCloudData(void) {
-  std::cout << "Debugging!!!" << std::endl;
   if (!lds_) {
     std::cout << "lds is not registered" << std::endl;
     return;
@@ -108,21 +84,14 @@ void Lddc::DistributePointCloudData(void) {
   }
 
   lds_->pcd_semaphore_.Wait();
-  std::cout << "DistributePointCloudData: Semaphore acquired" << std::endl;
-
   for (uint32_t i = 0; i < lds_->lidar_count_; i++) {
     uint32_t lidar_id = i;
     LidarDevice *lidar = &lds_->lidars_[lidar_id];
     LidarDataQueue *p_queue = &lidar->data;
-
-    std::cout << "Processing LiDAR " << lidar_id << std::endl;
-
-    if ((kConnectStateSampling != lidar->connect_state) || (p_queue == nullptr)) {
-      std::cout << "LiDAR " << lidar_id << " is not in sampling state or queue is null" << std::endl;
+    if ((kConnectStateSampling != lidar->connect_state) ||
+        (p_queue == nullptr)) {
       continue;
     }
-
-    std::cout << "LiDAR " << lidar_id << " is in sampling state, processing data" << std::endl;
     PollingLidarPointCloudData(lidar_id, lidar);
   }
 }
@@ -218,7 +187,6 @@ void Lddc::PublishCustomPointcloud(LidarDataQueue *queue, uint8_t index) {
 
 void Lddc::PublishPointcloud2AndCustomMsg(LidarDataQueue *queue,
                                           uint8_t index) {
-  // printf("12312312321\n");
   while (!QueueIsEmpty(queue)) {
     StoragePacket pkg;
     QueuePop(queue, &pkg);
@@ -307,16 +275,6 @@ void Lddc::InitPointcloud2MsgHeader(PointCloud2 &cloud, const uint8_t index) {
 
 void Lddc::InitPointcloud2Msg(const StoragePacket &pkg, PointCloud2 &cloud,
                               uint64_t &timestamp, const uint8_t index) {
-              
-  // 动态读取参数
-  double filter_radius_0 = 0.5;
-  double filter_radius_1 = 2.5;
-  cur_node_->get_parameter("filter_radius_0", filter_radius_0);
-  cur_node_->get_parameter("filter_radius_1", filter_radius_1);
-  // 打印 filter_radius 值
-  // std::cout << "filter_radius_0 is: " << filter_radius_0 << std::endl;
-  // std::cout << "filter_radius_1 is: " << filter_radius_1 << std::endl;
-
   InitPointcloud2MsgHeader(cloud, index);
 
   cloud.point_step = sizeof(LivoxPointXyzrtlt);
@@ -340,19 +298,11 @@ void Lddc::InitPointcloud2Msg(const StoragePacket &pkg, PointCloud2 &cloud,
     point.y = pkg.points[i].y;
     point.z = pkg.points[i].z;
 
-    // std::cout << "filter_radius_0_ is: " << filter_radius_0_ << std::endl;
-    // std::cout << "filter_radius_1_ is: " << filter_radius_1_ << std::endl;
-    
-    if (index == 0 && distance(point.x, point.y, point.z) < filter_radius_0_)
-    {
-      //std::cout << "Setting points to infinite far that are closer than 1.5\n";
-      point.x = 10000.0;
-      point.y = 10000.0;
-      point.z = 10000.0;
+    double current_radius = filter_radius_[index];
+    if (index < filter_radius_.size()) {
+      current_radius = filter_radius_[index];
     }
-    if (index == 1 && distance(point.x, point.y, point.z) < filter_radius_1_)
-    {
-      //std::cout << "Setting points to infinite far that are closer than 1.5\n";
+    if (std::sqrt(point.x * point.x + point.y * point.y + point.z * point.z) < current_radius) {
       point.x = 10000.0;
       point.y = 10000.0;
       point.z = 10000.0;
@@ -475,7 +425,6 @@ void Lddc::PublishImuData(LidarImuDataQueue &imu_data_queue,
                           const uint8_t index) {
   ImuData imu_data;
   if (!imu_data_queue.Pop(imu_data)) {
-    // printf("Publish imu data failed, imu data queue pop failed.\n");
     return;
   }
 
@@ -523,36 +472,6 @@ std::string Lddc::getFrameId(const uint8_t index)
   }
 }
 
-// std::string Lddc::getFrameId(const uint8_t index) {
-//   if (frame_id_.length() == 0) {
-//     return "livox_frame";
-//   } else {
-//     if (frame_id_.at(0) == '[') {
-//       auto parsedStr = frame_id_.substr(1, frame_id_.size() - 2);
-//       std::vector<std::string> v;
-
-//       std::stringstream ss(parsedStr);
-//       while (ss.good()) {
-//         std::string substr;
-//         getline(ss, substr, ',');
-//         v.push_back(substr);
-//       }
-
-//       if (!v.empty()) {
-//         std::cout << "Frame IDs parsed: ";
-//         for (const auto& id : v) std::cout << id << " ";
-//         std::cout << std::endl;
-//         return v[index];
-//       } else {
-//         return "livox_frame";
-//       }
-//     } else {
-//       return frame_id_;
-//     }
-//   }
-// }
-
-
 std::shared_ptr<rclcpp::PublisherBase>
 Lddc::CreatePublisher(uint8_t msg_type, std::string &topic_name,
                       uint32_t queue_size) {
@@ -573,60 +492,25 @@ Lddc::CreatePublisher(uint8_t msg_type, std::string &topic_name,
   }
 }
 
-
-// std::shared_ptr<rclcpp::PublisherBase>
-// Lddc::GetCurrentPublisher(uint8_t handle) {
-//   uint32_t queue_size = kMinEthPacketQueueSize;
-//   if (use_multi_topic_) {
-//     if (!private_pub_[handle]) {
-//       std::string topic_name = "livox/lidar_";
-//       if (handle == 0) {
-//         topic_name += topic_name_0_;
-//       } else if (handle == 1) {
-//         topic_name += topic_name_1_;
-//       } else {
-//         topic_name += "livox_frame";
-//       }
-//       queue_size = queue_size * 2; // queue size is 64 for only one lidar
-//       private_pub_[handle] = CreatePublisher(transfer_format_, topic_name, queue_size);
-//     }
-//     return private_pub_[handle];
-//   } else {
-//     if (!global_pub_) {
-//       std::string topic_name("livox/lidar");
-//       queue_size = queue_size * 8; // shared queue size is 256, for all lidars
-//       if (kAllMsg == transfer_format_) {
-//         global_pub_ = cur_node_->create_publisher<CustomMsg>(topic_name, queue_size);
-//         global_pub_2_ = cur_node_->create_publisher<PointCloud2>("livox/lidar/pointcloud", queue_size);
-//         DRIVER_INFO(*cur_node_, "%s publish use pointcloud2 and custom format", topic_name.c_str());
-//       } else {
-//         global_pub_ = CreatePublisher(transfer_format_, topic_name, queue_size);
-//       }
-//     }
-//     return global_pub_;
-//   }
-// }
 std::shared_ptr<rclcpp::PublisherBase>
 Lddc::GetCurrentPublisher(uint8_t handle) {
   uint32_t queue_size = kMinEthPacketQueueSize;
   if (use_multi_topic_) {
     if (!private_pub_[handle]) {
-      std::string topic_name = "livox/lidar_";
-      if (handle == 0) {
-        topic_name += topic_name_0_;
-      } else if (handle == 1) {
-        topic_name += topic_name_1_;
+      std::string topic_name;
+      if (handle < topic_names_.size()) {
+        topic_name = "livox/lidar_" + topic_names_[handle];
       } else {
-        topic_name += "livox_frame";
+        topic_name = "livox/lidar";
       }
-      queue_size = queue_size * 2; // queue size is 64 for only one lidar
+      queue_size = queue_size * 2; // 为每个雷达队列乘以2
       private_pub_[handle] = CreatePublisher(transfer_format_, topic_name, queue_size);
     }
     return private_pub_[handle];
   } else {
     if (!global_pub_) {
       std::string topic_name("livox/lidar");
-      queue_size = queue_size * 8; // shared queue size is 256, for all lidars
+      queue_size = queue_size * 8; // 共享队列，大小乘以8
       if (kAllMsg == transfer_format_) {
         global_pub_ = cur_node_->create_publisher<CustomMsg>(topic_name, queue_size);
         global_pub_2_ = cur_node_->create_publisher<PointCloud2>("livox/lidar/pointcloud", queue_size);
@@ -644,23 +528,32 @@ Lddc::GetCurrentPublisher2(uint8_t handle) {
   uint32_t queue_size = kMinEthPacketQueueSize;
   if (use_multi_topic_) {
     if (!private_pub_[handle]) {
-      std::string topic_name = "livox/lidar_";
-      if (handle == 0) {
-        topic_name += topic_name_0_;
-      } else if (handle == 1) {
-        topic_name += topic_name_1_;
-      } else {
-        topic_name += "livox_frame";
-      }
+      char name_str[48];
+      memset(name_str, 0, sizeof(name_str));
+
+      std::string ip_string = IpNumToString(lds_->lidars_[handle].handle);
+      snprintf(name_str, sizeof(name_str), "livox/lidar_%s",
+               ReplacePeriodByUnderline(ip_string).c_str());
+      std::string topic_name(name_str);
       queue_size = queue_size * 2; // queue size is 64 for only one lidar
-      private_pub_[handle] = CreatePublisher(transfer_format_, topic_name, queue_size);
+      private_pub_[handle] =
+          CreatePublisher(transfer_format_, topic_name, queue_size);
     }
     return private_pub_[handle];
   } else {
-    if (!global_pub_2_) {
-      std::string topic_name("livox/lidar/pointcloud");
+    if (!global_pub_) {
+      std::string topic_name("livox/lidar");
       queue_size = queue_size * 8; // shared queue size is 256, for all lidars
-      global_pub_2_ = CreatePublisher(transfer_format_, topic_name, queue_size);
+      if (kAllMsg == transfer_format_) {
+        global_pub_ =
+            cur_node_->create_publisher<CustomMsg>(topic_name, queue_size);
+        global_pub_2_ = cur_node_->create_publisher<PointCloud2>(
+            "livox/lidar/pointcloud", queue_size);
+        DRIVER_INFO(*cur_node_, "%s publish use pointcloud2 and custom format",
+                    topic_name.c_str());
+      } else {
+        global_pub_ = CreatePublisher(transfer_format_, topic_name, queue_size);
+      }
     }
     return global_pub_2_;
   }
@@ -671,22 +564,20 @@ Lddc::GetCurrentImuPublisher(uint8_t handle) {
   uint32_t queue_size = kMinEthPacketQueueSize;
   if (use_multi_topic_) {
     if (!private_imu_pub_[handle]) {
-      std::string topic_name = "livox/imu_";
-      if (handle == 0) {
-        topic_name += topic_name_0_;
-      } else if (handle == 1) {
-        topic_name += topic_name_1_;
+      std::string topic_name;
+      if (handle < topic_names_.size()) {
+        topic_name = "livox/imu_" + topic_names_[handle];
       } else {
-        topic_name += "default";
+        topic_name = "livox/imu";
       }
-      queue_size = queue_size * 2; // queue size is 64 for only one lidar
+      queue_size = queue_size * 2; // 队列大小为雷达数量 * 2
       private_imu_pub_[handle] = CreatePublisher(kLivoxImuMsg, topic_name, queue_size);
     }
     return private_imu_pub_[handle];
   } else {
     if (!global_imu_pub_) {
       std::string topic_name("livox/imu");
-      queue_size = queue_size * 8; // shared queue size is 256, for all lidars
+      queue_size = queue_size * 8; // 共享队列，队列大小为 8
       global_imu_pub_ = CreatePublisher(kLivoxImuMsg, topic_name, queue_size);
     }
     return global_imu_pub_;

@@ -14,12 +14,8 @@ frame_id      = '[livox_frame_front,livox_frame_rear]'
 lvx_file_path = '/home/livox/livox_test.lvx'
 cmdline_bd_code = 'livox0000000001'
 
-filter_radius_0 = 0.5
-filter_radius_1 = 2.5
-
-topic_name_0 = "livox_frame_front"
-topic_name_1 = "livox_frame_rear"
-
+filter_radius = [0.5, 2.5]
+topic_names = ["livox_frame_front", "livox_frame_rear"]
 
 cur_path = os.path.split(os.path.realpath(__file__))[0] + '/'
 cur_config_path = cur_path + '../config'
@@ -36,10 +32,8 @@ livox_ros2_params = [
     {"lvx_file_path": lvx_file_path},
     {"user_config_path": user_config_path},
     {"cmdline_input_bd_code": cmdline_bd_code},
-    {"filter_radius_0": filter_radius_0},  
-    {"filter_radius_1": filter_radius_1},
-    {"topic_name_0": topic_name_0},
-    {"topic_name_1": topic_name_1} 
+    {"filter_radius": filter_radius},  
+    {"topic_names": topic_names}  
 ]
 
 
