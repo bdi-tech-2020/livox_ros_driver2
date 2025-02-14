@@ -48,7 +48,7 @@ double distance(double x1, double y1, double z1) {
 }
 
 /** Lidar Data Distribute Control--------------------------------------------*/
-Lddc::Lddc(int format, int multi_topic, int data_src, int output_type, double frq, std::string &frame_id, std::vector<double> filter_radius, std::vector<std::string> topic_names)
+Lddc::Lddc(int format, int multi_topic, int data_src, int output_type, double frq, std::string &frame_id, const std::vector<double>& filter_radius, const std::vector<std::string>& topic_names)
     : transfer_format_(format), use_multi_topic_(multi_topic), data_src_(data_src), output_type_(output_type), publish_frq_(frq), frame_id_(frame_id), filter_radius_(filter_radius), topic_names_(topic_names)
        {
   publish_period_ns_ = kNsPerSecond / publish_frq_;
@@ -503,14 +503,14 @@ Lddc::GetCurrentPublisher(uint8_t handle) {
       } else {
         topic_name = "livox/lidar";
       }
-      queue_size = queue_size * 2; // 为每个雷达队列乘以2
+      queue_size = queue_size * 2; // queue size is 64 for only one lidar
       private_pub_[handle] = CreatePublisher(transfer_format_, topic_name, queue_size);
     }
     return private_pub_[handle];
   } else {
     if (!global_pub_) {
       std::string topic_name("livox/lidar");
-      queue_size = queue_size * 8; // 共享队列，大小乘以8
+      queue_size = queue_size * 8; // shared queue size is 256, for all lidars
       if (kAllMsg == transfer_format_) {
         global_pub_ = cur_node_->create_publisher<CustomMsg>(topic_name, queue_size);
         global_pub_2_ = cur_node_->create_publisher<PointCloud2>("livox/lidar/pointcloud", queue_size);
@@ -570,14 +570,14 @@ Lddc::GetCurrentImuPublisher(uint8_t handle) {
       } else {
         topic_name = "livox/imu";
       }
-      queue_size = queue_size * 2; // 队列大小为雷达数量 * 2
+      queue_size = queue_size * 2; // queue size is 64 for only one lidar
       private_imu_pub_[handle] = CreatePublisher(kLivoxImuMsg, topic_name, queue_size);
     }
     return private_imu_pub_[handle];
   } else {
     if (!global_imu_pub_) {
       std::string topic_name("livox/imu");
-      queue_size = queue_size * 8; // 共享队列，队列大小为 8
+      queue_size = queue_size * 8; // shared queue size is 256, for all lidars
       global_imu_pub_ = CreatePublisher(kLivoxImuMsg, topic_name, queue_size);
     }
     return global_imu_pub_;

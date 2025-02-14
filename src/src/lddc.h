@@ -65,7 +65,7 @@ class DriverNode;
 
 class Lddc final {
 public:
-  Lddc(int format, int multi_topic, int data_src, int output_type, double frq, std::string &frame_id, std::vector<double> filter_radius, std::vector<std::string> topic_names);
+  Lddc(int format, int multi_topic, int data_src, int output_type, double frq, std::string &frame_id, const std::vector<double>& filter_radius, const std::vector<std::string>& topic_names);
   ~Lddc();
 
   int RegisterLds(Lds *lds);
