@@ -8,7 +8,4 @@ __pycache__/
 .catkin_workspace
 *.gv
 *.pdf
-
-
-# Jupyter
-.ipynb_checkpoints/
+**/.ipynb_checkpoints
