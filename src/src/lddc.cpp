@@ -42,6 +42,11 @@
 
 namespace livox_ros {
 
+// Function to calculate distance
+double distance(double x1, double y1, double z1) {
+    return std::sqrt(std::pow((x1), 2) + std::pow((y1), 2) + std::pow((z1), 2));
+}
+
 /** Lidar Data Distribute Control--------------------------------------------*/
 Lddc::Lddc(int format, int multi_topic, int data_src, int output_type,
            double frq, std::string &frame_id)
@@ -294,6 +299,20 @@ void Lddc::InitPointcloud2Msg(const StoragePacket &pkg, PointCloud2 &cloud,
     point.x = pkg.points[i].x;
     point.y = pkg.points[i].y;
     point.z = pkg.points[i].z;
+    if (index == 0 && distance(point.x, point.y, point.z) < 0.5)
+    {
+      //std::cout << "Setting points to infinite far that are closer than 1.5\n";
+      point.x = 10000.0;
+      point.y = 10000.0;
+      point.z = 10000.0;
+    }
+    if (index == 1 && distance(point.x, point.y, point.z) < 2.5)
+    {
+      //std::cout << "Setting points to infinite far that are closer than 1.5\n";
+      point.x = 10000.0;
+      point.y = 10000.0;
+      point.z = 10000.0;
+    }
     point.reflectivity = pkg.points[i].intensity;
     point.tag = pkg.points[i].tag;
     point.line = pkg.points[i].line;
