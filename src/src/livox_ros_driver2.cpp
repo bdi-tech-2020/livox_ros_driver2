@@ -53,6 +53,8 @@ DriverNode::DriverNode(const rclcpp::NodeOptions &node_options)
   std::string frame_id;
   double filter_radius_0 = 0.5; // Default value
   double filter_radius_1 = 2.5; // Default value
+  std::string topic_name_0 = "livox_frame_front";
+  std::string topic_name_1 = "livox_frame_rear";
 
   this->declare_parameter("xfer_format", xfer_format);
   this->declare_parameter("multi_topic", 0);
@@ -65,6 +67,8 @@ DriverNode::DriverNode(const rclcpp::NodeOptions &node_options)
   this->declare_parameter("lvx_file_path", "/home/livox/livox_test.lvx");
   this->declare_parameter("filter_radius_0", 0.5);
   this->declare_parameter("filter_radius_1", 2.5);
+  this->declare_parameter("topic_name_0", "livox_frame_front");
+  this->declare_parameter("topic_name_1", "livox_frame_rear");
 
   this->get_parameter("xfer_format", xfer_format);
   this->get_parameter("multi_topic", multi_topic);
@@ -74,6 +78,8 @@ DriverNode::DriverNode(const rclcpp::NodeOptions &node_options)
   this->get_parameter("frame_id", frame_id);
   this->get_parameter("filter_radius_0", filter_radius_0);
   this->get_parameter("filter_radius_1", filter_radius_1);
+  this->get_parameter("topic_name_0", topic_name_0);
+  this->get_parameter("topic_name_1", topic_name_1);
 
   if (publish_freq > 100.0) {
     publish_freq = 100.0;
@@ -87,7 +93,7 @@ DriverNode::DriverNode(const rclcpp::NodeOptions &node_options)
 
   /** Lidar data distribute control and lidar data source set */
   lddc_ptr_ = std::make_unique<Lddc>(xfer_format, multi_topic, data_src,
-                                     output_type, publish_freq, frame_id, filter_radius_0, filter_radius_1);
+                                     output_type, publish_freq, frame_id, filter_radius_0, filter_radius_1, topic_name_0, topic_name_1);
   lddc_ptr_->SetRosNode(this);
 
   if (data_src == kSourceRawLidar) {
