@@ -65,8 +65,7 @@ class DriverNode;
 
 class Lddc final {
 public:
-  Lddc(int format, int multi_topic, int data_src, int output_type, double frq,
-       std::string &frame_id);
+  Lddc(int format, int multi_topic, int data_src, int output_type, double frq, std::string &frame_id, const std::vector<double>& filter_radius, const std::vector<std::string>& topic_names);
   ~Lddc();
 
   int RegisterLds(Lds *lds);
@@ -140,6 +139,8 @@ private:
   double publish_frq_;
   uint32_t publish_period_ns_;
   std::string frame_id_;
+  std::vector<double> filter_radius_;
+  std::vector<std::string> topic_names_;
 
   PublisherPtr private_pub_[kMaxSourceLidar];
   PublisherPtr global_pub_;
