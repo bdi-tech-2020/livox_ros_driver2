@@ -143,6 +143,7 @@ private:
   std::vector<std::string> topic_names_;
 
   PublisherPtr private_pub_[kMaxSourceLidar];
+  PublisherPtr private_pub_pc2_[kMaxSourceLidar]; 
   PublisherPtr global_pub_;
   PublisherPtr global_pub_2_;
   PublisherPtr private_imu_pub_[kMaxSourceLidar];
